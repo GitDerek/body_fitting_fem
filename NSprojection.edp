@@ -13,7 +13,6 @@ real xmax = 16.5 * D;
 real ymin = -8.35 * D;
 real ymax = 8.35 * D;
 
-
 border a0(t=ymax, ymin){ x=xmin;      y=t;      label=1;}// inlet ..
 border a1(t=xmin, xmax){ x=t;    y=ymin;        label=2;}
 border a2(t=ymin, ymax){ x=xmax;      y=t;       label=3;}
@@ -21,20 +20,21 @@ border a3(t=xmax, xmin){ x=t;  y=ymax;       label=4;}
 border b0(t=0, 2*pi){x = 0.5*D*cos(t); y = 0.5*D*sin(t); label=5;}
 
 int n=10;
-mesh Th= buildmesh(a0(3*n)+a1(2*n)+a2(3*n)+a3(2*n)+b0(-4*n));
+mesh Th= buildmesh(a0(2*n)+a1(n)+a2(2*n)+a3(n)+b0(-4*n));
 
 plot(Th, wait=1);
+
 savemesh(Th, "mesh_sample.msh");
 
 fespace Vh(Th,P1);
 
-real nu = 0.0025, dt = 0.2; // Reynolds=200
+real nu = D/40.0, dt = 0.2; // Reynolds=200
 
 Vh w,u = 0, v =0, p = 0, q=0;
 
- real epsv = 1e-6, epsu = 1e-6, epsp = 1e-6;// Eps CG ..
- // def of Matrix dtMx and dtMy
- matrix dtM1x,dtM1y;
+real epsv = 1e-6, epsu = 1e-6, epsp = 1e-6;// Eps CG ..
+// def of Matrix dtMx and dtMy
+matrix dtM1x,dtM1y;
 
 macro  BuildMat()
  { /* for memory managenemt */
@@ -55,45 +55,45 @@ macro  BuildMat()
 BuildMat
 
 real err=1, outflux=1;
-for(int n=0;n<300;n++)
- {
+for(int n=0;n<200;n++) {
   Vh uold = u,  vold = v, pold=p;
 
   solve pb4u(u,w,init=n,solver=CG,eps=epsu)
         =int2d(Th)(u*w/dt +nu*(dx(u)*dx(w)+dy(u)*dy(w)))
         -int2d(Th)((convect([uold,vold],-dt,uold)/dt-dx(p))*w)
-        + on(1,u = 4*y*(1-y)) + on(2,4,u = 0)
-        ;
+        + on(1,u = 1) + on(5, u = 0);
+  
   plot(u);
 
   solve pb4v(v,w,init=n,solver=CG,eps=epsv)
         = int2d(Th)(v*w/dt +nu*(dx(v)*dx(w)+dy(v)*dy(w)))
         -int2d(Th)((convect([uold,vold],-dt,vold)/dt-dy(p))*w)
-        +on(1,2,3,4,v = 0);
+        +on(1,2,4,5,v = 0);
 
- solve pb4p(q,w,solver=CG,init=n,eps=epsp) = int2d(Th)(dx(q)*dx(w)+dy(q)*dy(w))
-    - int2d(Th)((dx(u)+ dy(v))*w/dt)+ on(3,q=0);
+ solve pb4p(q,w,solver=CG,init=n,eps=epsp) 
+     = int2d(Th)(dx(q)*dx(w)+dy(q)*dy(w))
+     - int2d(Th)((dx(u)+ dy(v))*w/dt)+ on(3,q=0);
 
  // to have absolute epsilon in CG algorithm.
   epsv = -abs(epsv);
   epsu = -abs(epsu);
   epsp = -abs(epsp);
 
-  p = pold-q;
-  u[] += dtM1x*q[];
-  v[] += dtM1y*q[];
+  p = pold - q;
+  u[] += dtM1x * q[];
+  v[] += dtM1y * q[];
 
 
   if(n%50==49){
-    Th = adaptmesh(Th,[u,v],q,err=0.04,nbvx=100000);
-    plot(Th, wait=true);
+    Th = adaptmesh(Th,[u,v],err=0.01,nbvx=100000);
+    plot(Th, wait=1);
     BuildMat // rebuild mat.
  }
 
   err = sqrt(int2d(Th)(square(u-uold)+square(v-vold))/Th.area) ;
   outflux = int1d(Th)( [u,v]'*[N.x,N.y]) ;
   cout << " iter " << n << " Err L2 = " << err << " "<< " flux sortant = "<< outflux << endl;
-  if(err < 1e-3) break;
+  if(err < 1e-5) break;
 }
 assert(abs(outflux)< 2e-3); // verifaction ...
 plot(p,wait=1,ps="NSprojP.eps");
